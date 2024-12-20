@@ -18,12 +18,11 @@ Modified by Vineet Tambe, 2023.
 import sys, os.path
 from zipfile import ZipFile as ZipFile
 
-zip_path = f"{sys.argv[1]}_hw3.zip"
+zip_path = f"ahiyer_hw3.zip"
 
 if os.path.isfile(zip_path):
     print("{} is found.".format(zip_path))
 else:
-    print("Could not find handin zip.")
 
 andrewid = os.path.basename(zip_path).split("_")[0]
 print("Your Andrew Id is {}.".format(andrewid))

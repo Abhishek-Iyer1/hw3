@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from tqdm import tqdm
 
 from q2_1_eightpoint import eightpoint
 from q3_2_triangulate import findM2
@@ -32,8 +33,16 @@ Q4.2: Finding the 3D position of given points based on epipolar correspondence a
 def compute3D_pts(temple_pts1, intrinsics, F, im1, im2):
     # ----- TODO -----
     # YOUR CODE HERE
-    raise NotImplementedError()
-    return P
+    temple_pts2 = np.zeros_like(temple_pts1) # N x 2
+
+    for i, (x1, y1) in tqdm(enumerate(temple_pts1)):
+        x2, y2 = epipolarCorrespondence(im1, im2, F, x1, y1)
+        temple_pts2[i, 0] = x2
+        temple_pts2[i, 1] = y2
+
+    M2, C2, P = findM2(F, temple_pts1, temple_pts2, intrinsics)
+
+    return M2, C2, P
 
 
 def plot_3D(P):
@@ -64,8 +73,11 @@ if __name__ == "__main__":
 
     F = eightpoint(pts1, pts2, M=np.max([*im1.shape, *im2.shape]))
 
-    P = compute3D_pts(temple_pts1, intrinsics, F, im1, im2)
+    M2, C2, P = compute3D_pts(temple_pts1, intrinsics, F, im1, im2)
+    M1 = np.hstack((np.identity(3), np.zeros(3)[:, np.newaxis]))
+    C1 = K1 @ M1
 
+    np.savez("q4_2.npz", F, M1, M2, C1, C2)
     # Visualize
     fig = plt.figure()
     ax = Axes3D(fig)

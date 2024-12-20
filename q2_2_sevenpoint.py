@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
-from helper import displayEpipolarF, calc_epi_error, toHomogenous, _singularize
+from tqdm import tqdm
+from sympy import Symbol, solve_poly_system, det, Matrix, MatrixSymbol
+from helper import displayEpipolarF, calc_epi_error, toHomogenous, _singularize, refineF
 
 # Insert your package here
 
@@ -29,7 +30,56 @@ def sevenpoint(pts1, pts2, M):
     Farray = []
     # ----- TODO -----
     # YOUR CODE HERE
-    raise NotImplementedError()
+    num_points = pts1.shape[0]
+
+    pts1_homogenous = np.ones((num_points, 3)) # N x 3
+    pts2_homogenous = np.ones((num_points, 3)) # N x 3
+
+    pts1_homogenous[:, :2] = pts1
+    pts2_homogenous[:, :2] = pts2
+
+    # Create a Matrix T such that it normalizes the points (Check normalization implementation twice)
+    T = np.array([[1/M, 0, 0],
+                  [0, 1/M, 0],
+                  [0, 0, 1]])
+    
+    pts1_normalized = (T @ pts1_homogenous.T).T # N x 3
+    pts2_normalized = (T @ pts2_homogenous.T).T # N x 3
+
+    # Setup the fundamental matrix equation given N points    
+    coeffeciant_matrix = np.zeros((num_points, 9)) # N x 9
+
+    for i in range(0, num_points):
+
+        u1 = pts1_normalized[i][0]; u2 = pts2_normalized[i][0] #u1 and u2 are x coordinate pixel values for left and right images respectively
+        v1 = pts1_normalized[i][1]; v2 = pts2_normalized[i][1] #v1 and v2 are y coordinate pixel values for left and right images respectively
+
+        coeffeciant_vector = np.array([u1*u2, u1*v2, u1, v1*u2, v1*v2, v1, u2, v2, 1])
+        coeffeciant_matrix[i, :] = coeffeciant_vector
+
+    # Use SVD to find the fundamental matrix
+    u, s, vh = np.linalg.svd(coeffeciant_matrix)
+
+    f1 = vh[-1]
+    f2 = vh[-2]
+
+    f1 = f1.reshape(3, 3)
+    f2 = f2.reshape(3, 3)
+
+    a = Symbol('a')
+    polynomial_a = Matrix((a*f1) + ((1-a)*f2)).det()
+    coeffs = polynomial_a.as_poly(a).all_coeffs()
+    coeffs_float = [float(coeff) for coeff in coeffs]
+    solutions = np.polynomial.polynomial.polyroots(coeffs_float)
+    Farray = np.zeros((len(solutions),3,3))
+    
+    for i, a in enumerate(solutions):
+        F_el = ((a*f1) + ((1-a)*f2)).T
+        F_el_enforced = _singularize(F_el)
+        F_el_unscaled = T.T @ F_el_enforced @ T
+        F_el_unscaled /= F_el_unscaled[2, 2]
+        Farray[i] = F_el_unscaled
+        
     return Farray
 
 
@@ -51,13 +101,8 @@ if __name__ == "__main__":
 
     print(Farray)
 
-    F = Farray[0]
-
-    np.savez("q2_2.npz", F, M)
-
     # fundamental matrix must have rank 2!
     # assert(np.linalg.matrix_rank(F) == 2)
-    displayEpipolarF(im1, im2, F)
 
     # Simple Tests to verify your implementation:
     # Test out the seven-point algorithm by randomly sampling 7 points and finding the best solution.
@@ -73,7 +118,7 @@ if __name__ == "__main__":
     F_res = []
     choices = []
     M = np.max([*im1.shape, *im2.shape])
-    for i in range(max_iter):
+    for i in tqdm(range(max_iter)):
         choice = np.random.choice(range(pts1.shape[0]), 7)
         pts1_choice = pts1[choice, :]
         pts2_choice = pts2[choice, :]
@@ -86,6 +131,9 @@ if __name__ == "__main__":
 
     min_idx = np.argmin(np.abs(np.array(ress)))
     F = F_res[min_idx]
+    np.savez("q2_2.npz", F, M)
+    print(F, M)
+    displayEpipolarF(im1, im2, F)
     print("Error:", ress[min_idx])
 
     assert F.shape == (3, 3)

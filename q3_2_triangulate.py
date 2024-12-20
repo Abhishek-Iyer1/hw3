@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from helper import camera2
 from q2_1_eightpoint import eightpoint
 from q3_1_essential_matrix import essentialMatrix
+from q2_2_sevenpoint import sevenpoint
 
 # Insert your package here
 
@@ -32,7 +33,45 @@ def triangulate(C1, pts1, C2, pts2):
     # ----- TODO -----
     # YOUR CODE HERE
 
-    raise NotImplementedError()
+    # Pts of the shape N x 2 (x, y)
+    num_points = pts1.shape[0]
+
+    # All ps are of the shape (1 x 4), equivalent to pl1.T, pl2.T ...
+    pl1 = C1[0]; pl2 = C1[1]; pl3 = C1[2]
+    pr1 = C2[0]; pr2 = C2[1]; pr3 = C2[2]
+
+    w = np.zeros((num_points, 4))
+
+    for i in range(num_points):
+        # Extract relevant x and y points from pts1 and 2
+        xl = pts1[i][0]; xr = pts2[i][0]
+        yl = pts1[i][1]; yr = pts2[i][1]
+
+        A_rows = np.array([yl*pl3 - pl2,
+                           pl1 - xl*pl3,
+                           yr*pr3 - pr2,
+                           pr1 - xr*pr3])
+        
+        # Run SVD to get back w = [X, Y, Z, 1].T
+        u, s, vh = np.linalg.svd(A_rows)
+        world_coords = vh[-1]
+        world_coords /= world_coords[-1]
+        w[i] = world_coords.T
+
+    # Back project to 2D homogeneous coordinates
+    pts1_backprojected_homogeneous = (C1 @ w.T).T # N x 3
+    pts2_backprojected_homogeneous = (C2 @ w.T).T # N x 3
+
+    pts1_backprojected_homogeneous /= np.expand_dims(pts1_backprojected_homogeneous[:, -1], axis=-1)
+    pts2_backprojected_homogeneous /= np.expand_dims(pts2_backprojected_homogeneous[:, -1], axis=-1)
+
+    pts1_backprojected_homogeneous = pts1_backprojected_homogeneous[:, :-1] # N x 2
+    pts2_backprojected_homogeneous = pts2_backprojected_homogeneous[:, :-1] # N x 2
+
+    # Calculate reprojection error
+    err = sum(np.linalg.norm(pts1 - pts1_backprojected_homogeneous, axis=1)**2) + sum(np.linalg.norm(pts2 - pts2_backprojected_homogeneous, axis=1)**2)
+    P = w[:,:-1]
+
     return P, err
 
 
@@ -63,10 +102,34 @@ def findM2(F, pts1, pts2, intrinsics, filename="q3_3.npz"):
     """
     # ----- TODO -----
     # YOUR CODE HERE
+    K1, K2 = intrinsics["K1"], intrinsics["K2"]
+    M1 = np.hstack((np.identity(3), np.zeros(3)[:, np.newaxis]))
+    C1 = K1 @ M1
+    
+    E = essentialMatrix(F, K1, K2)
+    M2s = camera2(E)
 
-    raise NotImplementedError()
+    true_M2 = None
+    true_P = None
+    max_num_pos = 0
+    true_error = None
+    true_C2 = None
 
-    return M2, C2, P
+    for i in range(M2s.shape[-1]):
+        M2 = M2s[:, :, i]
+        C2 = K2 @ M2
+        P, reprojection_error = triangulate(C1, pts1, C2, pts2)
+        num_pos = len(P[P[:,-1] > 0])
+        if num_pos > max_num_pos:
+            max_num_pos = num_pos
+            true_M2 = M2
+            true_P = P
+            true_C2 = C2
+            true_error = reprojection_error
+
+    print(f"True Reprojection Error: {true_error}")
+
+    return true_M2, true_C2, true_P
 
 
 if __name__ == "__main__":
@@ -80,7 +143,7 @@ if __name__ == "__main__":
     F = eightpoint(pts1, pts2, M=np.max([*im1.shape, *im2.shape]))
 
     M2, C2, P = findM2(F, pts1, pts2, intrinsics)
-
+    np.savez("q3_3.npz", M2, C2, P)
     # Simple Tests to verify your implementation:
     M1 = np.hstack((np.identity(3), np.zeros(3)[:, np.newaxis]))
     C1 = K1.dot(M1)

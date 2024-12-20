@@ -19,8 +19,8 @@ def essentialMatrix(F, K1, K2):
     # Replace pass by your implementation
     # ----- TODO -----
     # YOUR CODE HERE
-
-    pass
+    E = K1.T @ F @ K2
+    return E/E[2,2]
 
 
 if __name__ == "__main__":
@@ -33,7 +33,8 @@ if __name__ == "__main__":
 
     F = eightpoint(pts1, pts2, M=np.max([*im1.shape, *im2.shape]))
     E = essentialMatrix(F, K1, K2)
-    np.savez("q3_1.npz", E, F)
+    print(E)
+    np.savez("q3_1.npz", E, F)  
 
     # Simple Tests to verify your implementation:
     assert np.linalg.matrix_rank(E) == 2
